@@ -1,4 +1,4 @@
-# Add the following to the computer vision code
+# Add the following to facedetectiontest_colab.py
 
 !pip install facenet-pytorch
 !pip install hydra-core
