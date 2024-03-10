@@ -1,2 +1,12 @@
-deepface 
+deepface
+facenet-pytorch
+hydra-core
+matplotlib
 tensorflow
+mtcnn
+opencv-python
+jedi
+Pillow
+numpy
+pytorch-lightning
+pandas
