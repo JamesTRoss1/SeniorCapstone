@@ -1,0 +1,15 @@
+# Add the following to the computer vision code
+
+!pip install facenet-pytorch
+!pip install hydra-core
+!pip install pandas
+!pip install matplotlib
+!pip install numpy
+!pip install opencv-python
+!pip install Pillow
+!pip install jedi
+!pip install pytorch-lightning
+!pip install mtcnn
+!pip install --upgrade tensorflow
+import tensorflow as tf
+!pip install --upgrade numpy
