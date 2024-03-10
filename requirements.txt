@@ -1,1 +1,11 @@
 deepface
+
+facenet-pytorch
+hydra-core
+pandas
+opencv-python
+jedi
+Pillow
+pytorch-lightning
+mtcnn
+tensorflow
