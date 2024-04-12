@@ -9,7 +9,7 @@ import google.generativeai as genai
 def __start__():
     global model, safe
 
-    genai.configure(api_key="AIzaSyDysb2hlF6rCfuuFHL9QRpoUp8CFzbAFBo")
+    genai.configure(api_key=API KEY)
 
     for m in genai.list_models():
         if 'generateContent' in m.supported_generation_methods:
