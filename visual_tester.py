@@ -7,6 +7,9 @@ import google.generativeai as genai
 import subprocess
 import asyncio
 
+app = None 
+window = None 
+
 # Function to calculate the variance of Laplacian to measure image blurriness
 def blur_measure(image):
     """
@@ -109,9 +112,14 @@ import sys
 import multiprocessing
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout,  QPushButton
 from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLabel, QHBoxLayout, QGridLayout
+from PyQt6.QtGui import QImage, QPixmap 
 import os 
 
 def __run__(video_path):
+    
+    global window
+    
     output = {}
     
     print(str(video_path))
@@ -130,6 +138,8 @@ def __run__(video_path):
     # Iterate through frames
     while True:
         ret, frame = video_capture.read()
+        
+        
         if not ret:
             break 
         
@@ -177,9 +187,21 @@ def __run__(video_path):
     
     return output
 
+class DisplayImageWidget(QWidget):
+    def __init__(self, image):
+        super(DisplayImageWidget, self).__init__()
+        self.image = image
+        self.convert = QImage(self.image, self.image.shape[1], self.image.shape[0], self.image.strides[0], QImage.Format.Format_BGR888)
+        self.frame = QLabel()
+        self.frame.setPixmap(QPixmap.fromImage(self.convert))
+        
+        self.layout = QHBoxLayout(self)
+        self.layout.addWidget(self.frame)
+
 class EmotionWorker(QThread):
     finished = pyqtSignal()
     progress = pyqtSignal(int)
+    image = pyqtSignal(list)
     
     def __init__(self):
         QThread.__init__(self)
@@ -207,20 +229,34 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.setWindowTitle("Emotion Analysis")
+        self.setFixedSize(500, 500)
+        
         self.label = QLabel()
-        layout = QVBoxLayout()
-        layout.addWidget(self.label)
-        self.setLayout(layout)
-
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+        self.display_image_widget = None
+        
         self.worker = EmotionWorker()
         self.worker.finished.connect(self.worker_finished)
         self.worker.progress.connect(self.update_progress)
 
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.start_worker)
-        layout.addWidget(self.start_button)
+        self.layout.addWidget(self.start_button)
 
     def start_worker(self):
+        video_path = "audio/video.mp4"
+        video_capture = cv2.VideoCapture(video_path)
+        ret, frame = video_capture.read()
+        
+        if self.display_image_widget is None:
+            self.display_image_widget = DisplayImageWidget(frame)
+        
+        if self.display_image_widget is not None:
+            window.layout.addWidget(self.display_image_widget)
+            
         self.worker.start()
 
     def update_progress(self, value):
