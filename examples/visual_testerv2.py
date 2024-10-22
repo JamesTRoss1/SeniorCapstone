@@ -11,6 +11,7 @@ import subprocess
 import multiprocessing
 import os
 
+audio_file = "audio/video.mp4"
 
 # Function to calculate the variance of Laplacian to measure image blurriness
 def blur_measure(image):
@@ -197,23 +198,43 @@ class EmotionWorker(QThread):
     def run(self):
         print("here")
         deepface_result = None
-         
-        audio_file = "video.mp4"
         self.progress.emit(1)
         '''
         with multiprocessing.Pool(processes=1) as pool:
             deepface_result = pool.apply(process_video, args=(audio_file,))
             print(str(deepface_result))
             '''
-        deepface_result=process_video("video.mp4")
+        deepface_result=process_video(audio_file)
         print(type(deepface_result))
         self.progress.emit(50)
         self.emotion.emit(deepface_result)
         
+import sys
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSlider
+from PyQt6.QtMultimedia import QMediaPlayer
+from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PyQt6.QtCore import QUrl, Qt
 
+class VideoPlayer(QWidget):
+    def __init__(self, file_path):
+        super().__init__()
+
+        self.media_player = QMediaPlayer()
+        self.media_player.setSource(QUrl.fromLocalFile(file_path))
+        print(str(dir(self.media_player)))
+        print(str(self.media_player.hasVideo()))
+        print(str(self.media_player.duration()))
+        
+        self.video_widget = QVideoWidget()
+        print(str(dir(self.video_widget)))
+        self.media_player.setVideoOutput(self.video_widget)
+        
+        self.media_player.play()
+        
 class Screen2(QWidget):
     #Note: when data is passed from one screen to another, need to have the screen the data needs to 'go to' passed in as an arugument here**
     def __init__(self, stack, screen3):
+        global audio_file 
         super().__init__()
         self.stack = stack
         self.screen3 = screen3
@@ -232,6 +253,11 @@ class Screen2(QWidget):
         layout.addWidget(self.option_1_button)
         layout.addWidget(self.label2)
         layout.addWidget(option_2_button)
+        
+        self.video_player_widget = VideoPlayer(audio_file)
+        layout.addWidget(self.video_player_widget.video_widget)
+        self.video_player_widget.media_player.play()
+        
         self.setLayout(layout)
 
 
@@ -317,7 +343,7 @@ class Screen3(QWidget):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setGeometry(200,200, 400, 400)
+        self.setGeometry(500 , 500, 800, 800)
         self.setStyleSheet('background-color:lightblue; color:black; font-weight: bold; font-size: 16px')
         self.stack = QStackedWidget()
         self.screen3 = None
