@@ -10,8 +10,10 @@ import google.generativeai as genai
 import subprocess
 import multiprocessing
 import os
+import math 
 
 audio_file = "audio/video.mp4"
+frame = None 
 
 # Function to calculate the variance of Laplacian to measure image blurriness
 def blur_measure(image):
@@ -46,11 +48,12 @@ def convert_mp4_to_wav(mp4_file):
 
 # Function to determine emotions of a collection of faces in a frame
 def emotion_faces(faces):
-    preds = DeepFace.analyze(faces, actions=['emotion'], detector_backend="mtcnn", enforce_detection=False)
+    preds = DeepFace.analyze(faces, actions=['emotion', 'age'], detector_backend="mtcnn", enforce_detection=False)
     emotions = {}
     weights = {'sad': 1, 'angry': 1, 'surprise': 1, 'fear': 1, 'happy': 1, 'disgust': 1, 'neutral': 1}
     for pred in preds:
-        if pred["face_confidence"] < 0.8:
+        #ignore the prediction if the confidence is less than 0.8 or the face is less than 13 years old
+        if pred["face_confidence"] < 0.7 or pred["age"] < 13:
             pass
         else:
             emotions = {k: emotions.get(k, 0) + pred['emotion'].get(k, 0) for k in set(emotions) | set(pred['emotion'])}
@@ -92,8 +95,11 @@ def generate_gemini_content(sentence, emotion):
     prompt = f"I have a sentence: \"{sentence}\". The current emotional sentiment of the environment is {emotion}. Can you rewrite the sentence to better mediate this emotional sentiment while conveying the same core message? Output only the best option, which can be multiple sentences long, that will best improve the emotion of the environment. Do not include an explanation or more than one option."
     response = model.generate_content(prompt, safety_settings=safe)
     return response.text
+
 # Load the video
-def process_video(video_path):
+def process_video(self, video_path):
+    global frame 
+    
     video_capture = cv2.VideoCapture(video_path)
     #video_capture = cv2.VideoCapture(1)
     # Set frame rate
@@ -104,14 +110,20 @@ def process_video(video_path):
     detector = MTCNN()
     # Initialize emotion list for the entire video
     video_emotions = []
-    # Iterate through frames
+    # Iterate through frames and record progress 
+    max_progress = int(seconds*int(video_capture.get(cv2.CAP_PROP_FPS))//fps)
+    progress_counter = 0
+    
     while video_capture.isOpened():
         ret, frame = video_capture.read()
         if not ret:
             break
         # Capture frame every 'fps' seconds
         frame_count += 1
-        if frame_count >= seconds*int(video_capture.get(cv2.CAP_PROP_FPS))/fps:
+        progress_counter += 1
+        
+        self.progress.emit(int((progress_counter / max_progress) * 100))
+        if frame_count >= seconds*int(video_capture.get(cv2.CAP_PROP_FPS))//fps:
             break
         if frame_count % fps == 0:
             print(f"Processing frame {frame_count}")
@@ -198,25 +210,46 @@ class EmotionWorker(QThread):
     def run(self):
         print("here")
         deepface_result = None
-        self.progress.emit(1)
+        self.progress.emit(0)
         '''
         with multiprocessing.Pool(processes=1) as pool:
             deepface_result = pool.apply(process_video, args=(audio_file,))
             print(str(deepface_result))
             '''
-        deepface_result=process_video(audio_file)
+        deepface_result=process_video(self, audio_file)
         print(type(deepface_result))
-        self.progress.emit(50)
         self.emotion.emit(deepface_result)
         
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSlider
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QSlider, QHBoxLayout
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtCore import QUrl, Qt
+from PyQt6.QtGui import QImage, QPixmap
+
+class DisplayImageWidget(QWidget):
+    def __init__(self):
+        super(DisplayImageWidget, self).__init__()
+        self.image = None  # Initialize image to None
+        self.frame = QLabel()
+        self.layout = QHBoxLayout(self)
+        self.layout.addWidget(self.frame)
+
+    def set_image(self, image):
+        self.image = image
+        if self.image is not None:
+            self.convert = QImage(self.image, self.image.shape[1], self.image.shape[0], self.image.strides[0], QImage.Format.Format_BGR888)
+            self.frame.setPixmap(QPixmap.fromImage(self.convert))
+
+        else:
+            self.frame.clear()  # Clear the frame if image is None
+
+    def get_image(self):
+        return self.image
 
 class VideoPlayer(QWidget):
     def __init__(self, file_path):
+        global frame 
         super().__init__()
 
         self.media_player = QMediaPlayer()
@@ -248,15 +281,17 @@ class Screen2(QWidget):
         option_2_button = QPushButton("Select option 2")
         option_2_button.clicked.connect(self.go_to_screen3_maxemotion)
         
+        self.label3 = QLabel()
+        
         layout.addWidget(self.label)
         layout.addWidget(self.label1)
         layout.addWidget(self.option_1_button)
         layout.addWidget(self.label2)
         layout.addWidget(option_2_button)
+        layout.addWidget(self.label3)
         
-        self.video_player_widget = VideoPlayer(audio_file)
-        layout.addWidget(self.video_player_widget.video_widget)
-        self.video_player_widget.media_player.play()
+        self.video_player_widget = DisplayImageWidget()
+        layout.addWidget(self.video_player_widget)
         
         self.setLayout(layout)
 
@@ -299,7 +334,12 @@ class Screen2(QWidget):
         
         self.label.setText("Emotion detection is now complete!\n")
         self.set_emotion_data(emotion)
-
+        
+    def update_progress(self, value):
+        global frame 
+        self.label.setText(f"Progress: {value}%")
+        if frame is not None: 
+            self.video_player_widget.set_image(frame)
 
 
 class Screen3(QWidget):
@@ -355,6 +395,7 @@ class MainWindow(QWidget):
         self.worker = EmotionWorker()
         
         self.worker.emotion.connect(self.screen2.update_emotion)
+        self.worker.progress.connect(self.screen2.update_progress)
         # self.screen1 = Screen1(self.stack)
         # self.screen2 = Screen2(self.stack)
         # self.screen3 = Screen3(self.stack)
