@@ -15,15 +15,21 @@ import math
 audio_file = "audio/video.mp4"
 frame = None 
 
-# Function to calculate the variance of Laplacian to measure image blurriness
-def blur_measure(image):
+def detect_blur_laplacian(img, threshold=30):
+    """Detects image blur using the Laplacian filter.
+
+    Args:
+        img: The input image.
+        threshold: The variance threshold for determining blurriness.
+
+    Returns:
+        True if the image is blurry, False otherwise.
     """
-    Calculates the variance of Laplacian to measure image blurriness
-    :param numpy.ndarray image: Input image
-    :return: Variance of Laplacian
-    :rtype: float
-    """
-    return cv2.Laplacian(image, cv2.CV_64F).var()
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    fm = cv2.Laplacian(gray, cv2.CV_64F).var()
+    print(str(fm))
+    return True if fm < threshold else False
 
 
 def convert_mp4_to_wav(mp4_file):
@@ -118,10 +124,15 @@ def process_video(self, video_path):
         ret, frame = video_capture.read()
         if not ret:
             break
-        # Capture frame every 'fps' seconds
-        frame_count += 1
-        progress_counter += 1
         
+        # Capture frame every 'fps' seconds; check if frame is not blurry 
+        if not detect_blur_laplacian(frame):
+            frame_count += 1
+            progress_counter += 1
+        else:
+            print("Frame is blurry. Dropping frame.")
+            continue
+            
         self.progress.emit(int((progress_counter / max_progress) * 100))
         if frame_count >= seconds*int(video_capture.get(cv2.CAP_PROP_FPS))//fps:
             break
@@ -208,7 +219,6 @@ class EmotionWorker(QThread):
         QThread.__init__(self)
         
     def run(self):
-        print("here")
         deepface_result = None
         self.progress.emit(0)
         '''
@@ -238,11 +248,23 @@ class DisplayImageWidget(QWidget):
     def set_image(self, image):
         self.image = image
         if self.image is not None:
+            # Convert the image to a QImage
             self.convert = QImage(self.image, self.image.shape[1], self.image.shape[0], self.image.strides[0], QImage.Format.Format_BGR888)
-            self.frame.setPixmap(QPixmap.fromImage(self.convert))
+            
+            # Calculate the scaled size to fit within the frame
+            frame_width, frame_height = self.frame.size().width(), self.frame.size().height()
+            image_width, image_height = self.convert.size().width(), self.convert.size().height()
+            scale_factor = min(frame_width / image_width, frame_height / image_height)
+            scaled_width = int(image_width * scale_factor)
+            scaled_height = int(image_height * scale_factor)
 
+            # Scale the image
+            scaled_image = self.convert.scaled(scaled_width, scaled_height, Qt.AspectRatioMode.KeepAspectRatio)
+
+            # Set the scaled image to the label
+            self.frame.setPixmap(QPixmap.fromImage(scaled_image))
         else:
-            self.frame.clear()  # Clear the frame if image is None
+            self.frame.clear()
 
     def get_image(self):
         return self.image
@@ -353,6 +375,7 @@ class Screen3(QWidget):
         self.input_box = QLineEdit()
         self.submit_button = QPushButton("Generate emotionally altered announcement")
         self.labelgeneratedtext = QLabel("")
+        self.labelgeneratedtext.setWordWrap(True)
         self.submit_button.clicked.connect(self.gemini_connection)
 
         #Restart Button
@@ -383,7 +406,7 @@ class Screen3(QWidget):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setGeometry(500 , 500, 800, 800)
+        self.setFixedSize(800, 800)
         self.setStyleSheet('background-color:lightblue; color:black; font-weight: bold; font-size: 16px')
         self.stack = QStackedWidget()
         self.screen3 = None
@@ -409,7 +432,6 @@ class MainWindow(QWidget):
         self.setLayout(layout)
     
     def start_worker(self):
-        print("here")
         self.worker.start()
 
 if __name__ == "__main__":
