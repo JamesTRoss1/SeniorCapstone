@@ -1,6 +1,7 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
+from PyQt6.QtCore import QThread, pyqtSignal, QObject, QSize
+from PyQt6.QtGui import QIcon
 import tensorflow as tf
 import cv2
 from deepface import DeepFace
@@ -225,34 +226,66 @@ class Screen1(QWidget):
         self.stack = stack
         self.screen2 = screen2
 
-        layout = QVBoxLayout()
-        label = QLabel("Welcome to the Adaptive Announcement System! Please click start to begin crowd emotion detection.")
+        main_layout = QVBoxLayout()
+
+        # Top section with 3 labels
+        top_layout = QVBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)  # Set outer margins to zero
+        top_layout.setSpacing(0)  # Set spacing between labels to zero
+
+        top_layout.addWidget(QLabel("Adaptive Announcement System"), alignment=Qt.AlignmentFlag.AlignCenter)
+        top_layout.addWidget(QLabel("Welcome!"), alignment=Qt.AlignmentFlag.AlignCenter)
+        top_layout.addWidget(QLabel("Please choose the input method"), alignment=Qt.AlignmentFlag.AlignCenter)
+
+        main_layout.addLayout(top_layout)
+
+        # Middle section with a horizontal box containing two labels
+        middle_layout = QHBoxLayout()
+        middle_layout.addWidget(QLabel("Live video"))
+        middle_layout.addWidget(QLabel("Upload video"))
+        main_layout.addLayout(middle_layout)
+
+        # Another horizontal box with two buttons shaped as icons
+        button_layout = QHBoxLayout()
         
-        # Video type selection buttons
-        self.live_button = QRadioButton("Use live video footage")
-        self.preset_button = QRadioButton("Use pre-set video file")
+        # Create first icon button
+        icon_button1 = QPushButton()
+        original_icon1 = QPixmap("C:/Users/tous1/Desktop/Capstone/Workspace/camera_icon.png")
+        resized_icon1 = original_icon1.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        icon_button1.setIcon(QIcon(resized_icon1))
+        icon_button1.setFixedSize(40, 40)
+        icon_button1.setStyleSheet("background-color: transparent; border: none;")  # Styling for icon button
+        icon_button1.clicked.connect(self.toggle_start_button)  # Connect to a function
+
+        # Create second icon button
+        icon_button2 = QPushButton()
+        original_icon2 = QPixmap("C:/Users/tous1/Desktop/Capstone/Workspace/film_icon.png")  # Use a different icon if needed
+        resized_icon2 = original_icon2.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        icon_button2.setIcon(QIcon(resized_icon2))
+        icon_button2.setFixedSize(40, 40)
+        icon_button2.setStyleSheet("background-color: transparent; border: none;")  # Styling for icon button
+        icon_button2.clicked.connect(self.toggle_file_input)  # Connect to a function
+
         self.file_input = QLineEdit()
         self.file_input.setPlaceholderText("Enter video file name")
         self.file_input.setVisible(False)
 
-        # Start button (initially hidden)
-        self.start_button = QPushButton("Start")
-        self.start_button.setVisible(False)
-        self.start_button.clicked.connect(self.start_emotion_detection)
+        # Add buttons to the layout
+        button_layout.addWidget(icon_button1)
+        button_layout.addWidget(icon_button2)
+        main_layout.addLayout(button_layout)
 
-        # Connect video type selection buttons
-        self.live_button.toggled.connect(self.toggle_start_button)
-        self.preset_button.toggled.connect(self.toggle_file_input)
+        # Bottom section with a label and a button
+        bottom_layout = QHBoxLayout()
+        bottom_label = QLabel("click START to begin crowd emotion detection")
+        bottom_button = QPushButton("START")
+        bottom_button.clicked.connect(self.start_emotion_detection)  # Connect to a function
+        bottom_layout.addWidget(bottom_label)
+        bottom_layout.addWidget(bottom_button)
+        main_layout.addLayout(bottom_layout)
 
-        #start_button = QPushButton("Start")
-        #start_button.clicked.connect(self.start_emotion_detection)
-        layout.addWidget(label)
-        layout.addWidget(self.live_button)
-        layout.addWidget(self.preset_button)
-        layout.addWidget(self.file_input)
-        layout.addWidget(self.start_button)
-        self.setLayout(layout)
-        self.setLayout(layout)
+        # Set the main layout for the window
+        self.setLayout(main_layout)
 
     def toggle_start_button(self):
         # Show the start button if a selection has been made
