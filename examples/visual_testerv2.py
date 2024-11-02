@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QCheckBox
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 import tensorflow as tf
 import cv2
@@ -17,6 +17,7 @@ engine = pyttsx3.init()
 
 audio_file = "audio/video.mp4"
 frame = None 
+tts = False 
 
 def detect_blur_laplacian(img, threshold=30):
     """Detects image blur using the Laplacian filter.
@@ -255,15 +256,15 @@ class DisplayImageWidget(QWidget):
             # Convert the image to a QImage
             self.convert = QImage(self.image, self.image.shape[1], self.image.shape[0], self.image.strides[0], QImage.Format.Format_BGR888)
             
-            # Calculate the scaled size to fit within the frame
+            # Calculate the scaled size to fit within the frame, but prioritize filling the frame
             frame_width, frame_height = self.frame.size().width(), self.frame.size().height()
             image_width, image_height = self.convert.size().width(), self.convert.size().height()
-            scale_factor = min(frame_width / image_width, frame_height / image_height)
+            scale_factor = max(frame_width / image_width, frame_height / image_height)
             scaled_width = int(image_width * scale_factor)
             scaled_height = int(image_height * scale_factor)
 
-            # Scale the image
-            scaled_image = self.convert.scaled(scaled_width, scaled_height, Qt.AspectRatioMode.KeepAspectRatio)
+            # Scale the image, allowing it to exceed the frame size if necessary
+            scaled_image = self.convert.scaled(scaled_width, scaled_height, Qt.AspectRatioMode.IgnoreAspectRatio)
 
             # Set the scaled image to the label
             self.frame.setPixmap(QPixmap.fromImage(scaled_image))
@@ -302,10 +303,12 @@ class Screen2(QWidget):
         self.label1 = QLabel("")
         self.option_1_button = QPushButton("Select option 1")
         self.option_1_button.clicked.connect(self.go_to_screen3_completebreakdown)
+        self.option_1_button.hide()  # Initially hide the button
 
         self.label2 = QLabel("")
-        option_2_button = QPushButton("Select option 2")
-        option_2_button.clicked.connect(self.go_to_screen3_maxemotion)
+        self.option_2_button = QPushButton("Select option 2")
+        self.option_2_button.clicked.connect(self.go_to_screen3_maxemotion)
+        self.option_2_button.hide()  # Initially hide the button
         
         self.label3 = QLabel()
         
@@ -313,11 +316,14 @@ class Screen2(QWidget):
         layout.addWidget(self.label1)
         layout.addWidget(self.option_1_button)
         layout.addWidget(self.label2)
-        layout.addWidget(option_2_button)
+        layout.addWidget(self.option_2_button)
         layout.addWidget(self.label3)
         
         self.video_player_widget = DisplayImageWidget()
         layout.addWidget(self.video_player_widget)
+        
+        self.checkBox = QCheckBox('Text-To-Speech', self)
+        layout.addWidget(self.checkBox)
         
         self.setLayout(layout)
 
@@ -338,15 +344,19 @@ class Screen2(QWidget):
     def go_to_screen3_completebreakdown(self):
         # Switch to screen 3 after selecting an option
         #pass full emotion breakdown to screen 3 in this case
+        global tts 
         emotion_text_gemini = "\n".join([f"{emotion}: {percent:.2f}%" for emotion, percent in self.emotion_data.items()])
         self.screen3.set_emotions_forgemini(emotion_text_gemini)
+        tts = self.checkBox.isChecked()
         self.stack.setCurrentIndex(2)
 
     def go_to_screen3_maxemotion(self):
         # Switch to screen 3 after selecting an option
         #pass the overall emotion to screen 3 in this case
+        global tts 
         max_emotion = max(self.emotion_data, key=self.emotion_data.get)
         self.screen3.set_emotions_forgemini(max_emotion)
+        tts = self.checkBox.isChecked()
         self.stack.setCurrentIndex(2)
 
     def restart(self):
@@ -357,9 +367,10 @@ class Screen2(QWidget):
 
     def update_emotion(self, emotion):
         print(emotion)
-        
         self.label.setText("Emotion detection is now complete!\n")
         self.set_emotion_data(emotion)
+        self.option_1_button.show()
+        self.option_2_button.show()
         
     def update_progress(self, value):
         global frame 
@@ -377,7 +388,8 @@ class Screen3(QWidget):
         #layout.addWidget(label)
         self.labelemotionbreakdown = QLabel("")
         self.input_box = QLineEdit()
-        self.labellocation = QLabel("Please put your location in the box below for a more personalized statement")
+        self.labellocation = QLabel("Please put your location in the box below for a more personalized statement. Leave blank for generic response without location consideration.")
+        self.labellocation.setWordWrap(True)
         self.input_loc_box = QLineEdit()
         self.submit_button = QPushButton("Generate emotionally altered announcement")
         self.labelgeneratedtext = QLabel("")
@@ -412,13 +424,12 @@ class Screen3(QWidget):
         resp = generate_gemini_content(user_input, self.emotion_forgemini, location_input)
         self.labelgeneratedtext.setText(f"Generated content: {resp}")
         
-        # NOTE FOR TEAM add logic if audio is enabled then do this
-        # NOTE FOR TEAM it sounds like straight up AI lol 
-        voices = engine.getProperty('voices')       #getting details of current voice
-        engine.setProperty('rate', 125)     # setting up new voice rate
-        engine.setProperty('voice', voices[1].id)   #changing index, changes voices. 1 for female
-        engine.say(resp)
-        engine.runAndWait()
+        if tts:
+            voices = engine.getProperty('voices')       #getting details of current voice
+            engine.setProperty('rate', 125)     # setting up new voice rate
+            engine.setProperty('voice', voices[1].id)   #changing index, changes voices. 1 for female
+            engine.say(resp)
+            engine.runAndWait()
 
 class MainWindow(QWidget):
     def __init__(self):
