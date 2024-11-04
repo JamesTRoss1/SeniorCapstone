@@ -65,7 +65,7 @@ def generate_gemini_content(sentence, emotion):
             "threshold": "BLOCK_NONE",
         },
     ]
-    prompt = f"I have a sentence: \"{sentence}\". The current emotional sentiment of the environment is {emotion}. Can you rewrite the sentence to better mediate this emotional sentiment while conveying the same core message? Output only the best option, which can be multiple sentences long, that will best improve the emotion of the environment. Do not include an explanation or more than one option."
+    prompt = f"I have a sentence: \"{sentence}\". The current emotional sentiment of the environment is {emotion}. Can you rewrite the sentence to better mediate this emotional sentiment while conveying the same core message? Output only the best option, which can be multiple sentences long, that will best improve the emotion of the environment. Do not include an explanation or more than one option. Include newline characters every 10th word in the response."
     response = model.generate_content(prompt, safety_settings=safe)
     return response.text
 
@@ -174,13 +174,13 @@ class Screen1(QWidget):
         self.screen2 = screen2
 
         layout = QVBoxLayout()
-        label = QLabel("Welcome to the Adaptive Announcement System! Please click start to begin crowd emotion detection.")
+        label = QLabel("Welcome to the Adaptive Announcement System! \n\nPlease click start to begin crowd emotion detection.\nIf utilizing live video, please wait approximately 15 seconds for processing.")
         
         # Video type selection buttons
         self.live_button = QRadioButton("Use live video footage")
         self.preset_button = QRadioButton("Use pre-set video file")
         self.file_input = QLineEdit()
-        self.file_input.setPlaceholderText("Enter video file name")
+        self.file_input.setPlaceholderText("Enter absolute video path or relative video path.")
         self.file_input.setVisible(False)
 
         # Start button (initially hidden)
@@ -232,11 +232,11 @@ class Screen2(QWidget):
         layout = QVBoxLayout()
         self.label = QLabel("Emotion detection is now complete!\n")
         self.label1 = QLabel("")
-        self.option_1_button = QPushButton("Select option 1")
+        self.option_1_button = QPushButton("Complete Emotion Breakdown")
         self.option_1_button.clicked.connect(self.go_to_screen3_completebreakdown)
 
         self.label2 = QLabel("")
-        option_2_button = QPushButton("Select option 2")
+        option_2_button = QPushButton("Maximum Overall Emotion")
         option_2_button.clicked.connect(self.go_to_screen3_maxemotion)
         
         layout.addWidget(self.label)
@@ -274,7 +274,7 @@ class Screen3(QWidget):
         super().__init__()
         self.stack = stack
         layout = QVBoxLayout()
-        self.label = QLabel("Generating emotionally altered text screen. Please enter sentence in input box below then press the 'generate emotionally altered announcement' button. You may alter the text in the input box and re-generate the emotionally altered text")
+        self.label = QLabel("Generating emotionally altered text screen. \nPlease enter sentence in input box below then press the 'generate emotionally altered announcement' button. \nYou may alter the text in the input box and re-generate the emotionally altered text")
         #layout.addWidget(label)
         self.labelemotionbreakdown = QLabel("")
         self.input_box = QLineEdit()
