@@ -1,6 +1,8 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton, QFrame
+from PyQt6.QtCore import QThread, pyqtSignal, QObject, Qt
+from PyQt6.QtGui import QFont, QPixmap
+import sys
 import tensorflow as tf
 import cv2
 from deepface import DeepFace
@@ -226,33 +228,113 @@ class Screen1(QWidget):
         self.screen2 = screen2
 
         layout = QVBoxLayout()
-        label = QLabel("Welcome to the Adaptive Announcement System! Please click start to begin crowd emotion detection.")
+
+        # First label: Big heading with custom color
+        heading_label = QLabel("Welcome to the Adaptive Announcement System!")
+        heading_font = QFont("Arial", 32, QFont.Weight.Bold)  # Bigger heading font size
+    
+        heading_label.setFont(heading_font)  # Set the font for the heading
+        heading_label.setStyleSheet("color: #007BFF;") 
+        heading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the heading
+        heading_label.setWordWrap(True)  # Allow wrapping if necessary
+        heading_label.setMargin(20)  # Adding margin around the heading label
+
+        # Create a container (box) for the heading label
+        heading_box = QFrame()
+        heading_box.setFrameShape(QFrame.Shape.StyledPanel)  # Make it a styled box
+        heading_box.setFrameShadow(QFrame.Shadow.Raised)  # Optional: Add shadow
+        heading_box.setStyleSheet("""
+            background-color: #ECF0F1;  /* Light gray background */
+            border: 2px solid #007BFF;   /* Blue border */
+            border-radius: 10px;         /* Rounded corners */
+            padding: 10px;               /* Padding inside the box */
+        """)
         
-        # Video type selection buttons
+        heading_box_layout = QVBoxLayout()  # Create a layout for the heading box
+        heading_box_layout.addWidget(heading_label)  # Add the heading label to the layout
+        heading_box.setLayout(heading_box_layout)  # Set the layout for the QFrame
+
+        # Second label: Subheading or description with smaller font
+        description_label = QLabel("Please click 'Start' to begin crowd emotion detection.")
+        description_font = QFont("Arial", 18)  # Slightly smaller font for description
+        description_label.setFont(description_font)  # Apply the smaller font
+        description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center align the text
+        description_label.setStyleSheet("color: #34495E;")  # Slightly lighter color for description
+        description_label.setWordWrap(True)  # Allow wrapping if necessary
+        description_label.setMargin(10)  # Add some margin for breathing space
+
+        # Image Addition (PyQt6)
+        image_label = QLabel()
+        pixmap = QPixmap("announcement.jpg")  # Replace with your image path
+        # Optionally resize the image to fit well in the layout
+        pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+        image_label.setPixmap(pixmap)
+        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Create video type selection radio buttons
         self.live_button = QRadioButton("Use live video footage")
         self.preset_button = QRadioButton("Use pre-set video file")
+
+        # Create a horizontal layout for radio buttons to center them
+        radio_layout = QHBoxLayout()
+        radio_layout.addWidget(self.live_button)
+        radio_layout.addWidget(self.preset_button)
+        radio_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the radio buttons
+        radio_layout.setSpacing(20)  # Add spacing between the radio buttons
+
+        # File input (hidden initially)
         self.file_input = QLineEdit()
         self.file_input.setPlaceholderText("Enter video file name")
         self.file_input.setVisible(False)
+        self.file_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px;
+                border: 1px solid #BDC3C7;
+                border-radius: 5px;
+                background-color: #ECF0F1;
+                font-size: 16px;
+            }
+        """)
 
         # Start button (initially hidden)
         self.start_button = QPushButton("Start")
         self.start_button.setVisible(False)
         self.start_button.clicked.connect(self.start_emotion_detection)
+        self.style_button(self.start_button)  # Apply button styling
 
         # Connect video type selection buttons
         self.live_button.toggled.connect(self.toggle_start_button)
         self.preset_button.toggled.connect(self.toggle_file_input)
 
-        #start_button = QPushButton("Start")
-        #start_button.clicked.connect(self.start_emotion_detection)
-        layout.addWidget(label)
-        layout.addWidget(self.live_button)
-        layout.addWidget(self.preset_button)
-        layout.addWidget(self.file_input)
-        layout.addWidget(self.start_button)
+        # Add widgets to the main layout
+        layout.addWidget(heading_box)  # Heading in a styled box
+        layout.addWidget(description_label)  # Description label
+        layout.addWidget(image_label)  # Image display
+        layout.addLayout(radio_layout)  # Add radio buttons layout
+        layout.addWidget(self.file_input)  # File input field
+        layout.addWidget(self.start_button)  # Start button
+
+        layout.setSpacing(30)  # Set spacing between widgets
+        layout.setContentsMargins(50, 40, 50, 40)  # Add margins around layout
+
         self.setLayout(layout)
-        self.setLayout(layout)
+
+    
+    def style_button(self, button):
+        button.setStyleSheet("""
+             QPushButton {
+                background-color: #3498DB;  /* Bright blue background */
+                color: white;                /* White text */
+                border: none;                /* No border */
+                padding: 12px 20px;          /* Larger padding for the button */
+                font-size: 18px;             /* Increase font size */
+                border-radius: 8px;          /* Rounded corners */
+                min-width: 200px;            /* Ensure the button width is enough */
+            }
+            QPushButton:hover {
+                background-color: #2980B9;   /* Darker blue on hover */
+            }
+        """)
 
     def toggle_start_button(self):
         # Show the start button if a selection has been made
