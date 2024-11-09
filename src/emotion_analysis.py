@@ -1,6 +1,6 @@
 import sys
-from PyQt6.QtWidgets import QHBoxLayout, QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton, QFrame
-from PyQt6.QtCore import QThread, pyqtSignal,  Qt, QUrl
+from PyQt6.QtWidgets import QHBoxLayout, QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton, QFrame, QFileDialog, QCheckBox, QButtonGroup
+from PyQt6.QtCore import QThread, pyqtSignal,  Qt, QUrl, QProcess, QCoreApplication
 from PyQt6.QtGui import QFont, QPixmap, QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -12,10 +12,12 @@ import google.generativeai as genai
 import subprocess
 import os 
 import time
+import re
 import pyttsx3
 engine = pyttsx3.init()
 
-audio_file = "audio/video.mp4"
+audio_file = ""
+live_video = False
 frame = None 
 tts = True 
 
@@ -71,6 +73,7 @@ def emotion_faces(faces):
     if not emotions:
         return "Unknown", {}
     return max(emotions, key=emotions.get), emotions
+
 # Function to generate content using Google Gemini
 def generate_gemini_content(sentence, emotion, location):
     #can generate key here: https://aistudio.google.com/app/apikey
@@ -104,7 +107,10 @@ def generate_gemini_content(sentence, emotion, location):
     ]
     prompt = f"Prompt: Please alter the following sentence, considering the specified crowd sentiment, aiming to evoke a more positive emotional response, and taking into account the user's location. Aim to maintain the original meaning while adjusting the tone, vocabulary, or context as needed. Parameters: Sentence: {sentence} Crowd Sentiment: {emotion} User Location: {location} Instructions: If the crowd sentiment is negative, aim to elevate the emotional tone of the response. This might involve offering hope or optimism, providing comfort or reassurance, or shifting the focus towards more positive aspects of the situation or related topics. Ensure the response is relevant to the input sentence and the overall theme or topic. Incorporate location-specific references or cultural nuances to enhance the response's relevance and impact. For example, in California, reference local landmarks, popular culture, or current events; in Georgia, highlight Southern hospitality, historical significance, or outdoor activities. Be mindful of the specific context and nuances of the situation to avoid inappropriate or insensitive responses. Consider the cultural sensitivities and preferences of the user's location. If no location is provided then give a generic response. In all cases, only provide a single response, do not give options. Add a newline character to every tenth word of your output."
     response = model.generate_content(prompt, safety_settings=safe)
-    return response.text
+    cleaned_response = re.sub(r'[\n\\/\t]', '', str(response.text).strip())
+    cleaned_response = cleaned_response.replace('/', ' ')
+    print(str(cleaned_response))
+    return cleaned_response
 
 #captures 10 second video and saves to .mp4 file - can modify this as needed
 def capture_video(video_path, duration=10):
@@ -137,67 +143,71 @@ def capture_video(video_path, duration=10):
     out.release()
     cv2.destroyAllWindows()
 
-# Load the video
 def process_video(self, video_path):
-    global frame 
+    global frame, live_video 
     
-    video_capture = cv2.VideoCapture(video_path)
-    #video_capture = cv2.VideoCapture(1)
+    video_capture = None 
+    
+    if live_video:
+        print("Using Live Video")
+        video_capture = cv2.VideoCapture(0)
+    else:
+        video_capture = cv2.VideoCapture(video_path)
+    
     # Set frame rate
-    fps = 2
+    FRAMES = 10 
     frame_count = 0
-    seconds = 1
     # Create MTCNN detector
     detector = MTCNN()
     # Initialize emotion list for the entire video
     video_emotions = []
+    
     # Iterate through frames and record progress 
-    max_progress = int(seconds*int(video_capture.get(cv2.CAP_PROP_FPS))//fps)
+    max_progress = FRAMES
     progress_counter = 0
     
     while video_capture.isOpened():
+        if frame_count == FRAMES:
+            break 
+        
         ret, frame = video_capture.read()
         if not ret:
+            print("End of video")
             break
         
-        
-            
-        self.progress.emit(int((progress_counter / max_progress) * 100))
-        if frame_count >= seconds*int(video_capture.get(cv2.CAP_PROP_FPS))//fps:
-            break
-        if frame_count % fps == 0:
+        # Capture frame every 'fps' seconds; check if frame is not blurry 
+        if not detect_blur_laplacian(frame, 30):
+            frame_count += 1
+            progress_counter += 1
             print(f"Processing frame {frame_count}")
+            self.progress.emit(int((progress_counter / max_progress) * 100))
+            
             # Detect faces
             faces = detector.detect_faces(frame)
             cropped_faces = []
             # Extract faces and append to cropped_faces list
             for i, face in enumerate(faces):
-                # Capture frame every 'fps' seconds; check if frame is not blurry 
-                if not detect_blur_laplacian(frame):
-                    frame_count += 1
-                    progress_counter += 1
-                else:
-                    print("Frame is blurry. Dropping frame.")
-                    break
-
                 x, y, w, h = face['box']
                 cropped_face = frame[y:y + h, x:x + w]
                 cropped_faces.append(cropped_face)
                 # Save detected face as JPEG file
                 emotion, _ = emotion_faces(cropped_face)
-                '''
-                if emotion:
-                    cv2.imwrite(f"face_{frame_count}_{i+1}_{emotion}.jpg", cropped_face)
-                    '''
+                
             # Check if any faces were detected
             if len(cropped_faces) == 0:
                 print("No faces detected in this frame.")
                 continue  # Skip this frame if no faces are detected
+            
             # Output the list of cropped faces
             for i, face in enumerate(cropped_faces):
                 emotion, _ = emotion_faces(face)
                 if emotion:
                     video_emotions.append(emotion)
+                    
+        else:
+            print("Frame is blurry. Dropping frame.")
+            continue
+        
     # Close video capture
     video_capture.release()
     cv2.destroyAllWindows()
@@ -214,13 +224,6 @@ def process_video(self, video_path):
             print(f"{emotion}: {percentage:.2f}%")
 
         return emotion_percentages
-        # if overall_emotion == 'happy':
-        #     overall_emotion = 'neutral'
-        # if overall_emotion == 'sad':
-        #     overall_emotion = 'happy'
-        # sentence = input("Enter a sentence: ")
-        # generated_sentence = generate_gemini_content(sentence, overall_emotion)
-        # print("Generated Sentence:", generated_sentence)
     else:
         print("No emotions detected in the video.")
 
@@ -231,6 +234,7 @@ class Screen1(QWidget):
         self.screen2 = screen2
 
         layout = QVBoxLayout()
+        layout.addSpacing(20)
 
         # First label: Big heading with custom color
         heading_label = QLabel("Welcome to the Adaptive Announcement System!")
@@ -254,30 +258,30 @@ class Screen1(QWidget):
         """)
         
         heading_box_layout = QVBoxLayout()  # Create a layout for the heading box
+        heading_box_layout.addSpacing(20)
         heading_box_layout.addWidget(heading_label)  # Add the heading label to the layout
         heading_box.setLayout(heading_box_layout)  # Set the layout for the QFrame
 
         # Second label: Subheading or description with smaller font
-        description_label = QLabel("Please click 'Start' to begin crowd emotion detection.")
-        description_font = QFont("Arial", 18)  # Slightly smaller font for description
-        description_label.setFont(description_font)  # Apply the smaller font
-        description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center align the text
-        description_label.setStyleSheet("color: #34495E;")  # Slightly lighter color for description
-        description_label.setWordWrap(True)  # Allow wrapping if necessary
-        description_label.setMargin(10)  # Add some margin for breathing space
+        self.description_label = QLabel("Select the type of video input")
+        self.style_label(self.description_label)
 
         # Image Addition (PyQt6)
         image_label = QLabel()
-        pixmap = QPixmap("announcement.jpg")  # Replace with your image path
+        pixmap = QPixmap("images/announcement.jpg")  # Replace with your image path
         # Optionally resize the image to fit well in the layout
         pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
         image_label.setPixmap(pixmap)
         image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Create video type selection radio buttons
+        self.button_group = QButtonGroup()
         self.live_button = QRadioButton("Use live video footage")
         self.preset_button = QRadioButton("Use pre-set video file")
-
+        self.button_group.addButton(self.live_button)
+        self.button_group.addButton(self.preset_button)
+        self.button_group.setExclusive(True)
+        
         # Create a horizontal layout for radio buttons to center them
         radio_layout = QHBoxLayout()
         radio_layout.addWidget(self.live_button)
@@ -286,18 +290,9 @@ class Screen1(QWidget):
         radio_layout.setSpacing(20)  # Add spacing between the radio buttons
 
         # File input (hidden initially)
-        self.file_input = QLineEdit()
-        self.file_input.setPlaceholderText("Enter video file name")
+        self.file_input = QLabel()
         self.file_input.setVisible(False)
-        self.file_input.setStyleSheet("""
-            QLineEdit {
-                padding: 10px;
-                border: 1px solid #BDC3C7;
-                border-radius: 5px;
-                background-color: #ECF0F1;
-                font-size: 16px;
-            }
-        """)
+        self.style_label(self.file_input)
 
         # Start button (initially hidden)
         self.start_button = QPushButton("Start")
@@ -311,7 +306,7 @@ class Screen1(QWidget):
 
         # Add widgets to the main layout
         layout.addWidget(heading_box)  # Heading in a styled box
-        layout.addWidget(description_label)  # Description label
+        layout.addWidget(self.description_label)  # Description label
         layout.addWidget(image_label)  # Image display
         layout.addLayout(radio_layout)  # Add radio buttons layout
         layout.addWidget(self.file_input)  # File input field
@@ -337,23 +332,42 @@ class Screen1(QWidget):
                 background-color: #2980B9;   /* Darker blue on hover */
             }
         """)
+        
+    def style_label(self, label):
+        description_font = QFont("Arial", 18)  # Slightly smaller font for description
+        label.setFont(description_font)  # Apply the smaller font
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center align the text
+        label.setStyleSheet("color: #34495E;")  # Slightly lighter color for description
+        label.setWordWrap(True)  # Allow wrapping if necessary
+        label.setMargin(10)  # Add some margin for breathing space
 
     def toggle_start_button(self):
         # Show the start button if a selection has been made
+        self.description_label.setText("Please click 'Start' to begin crowd emotion detection")
         self.start_button.setVisible(self.live_button.isChecked() or self.preset_button.isChecked())
 
     def toggle_file_input(self):
         # Show file input field if "Use pre-set video file" is selected
-        self.file_input.setVisible(self.preset_button.isChecked())
+        if self.preset_button.isChecked():
+            file_dialog = QFileDialog()
+            file_dialog.setNameFilter("MP4 Files (*.mp4)")
+            file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+
+            if file_dialog.exec():
+                self.selected_file = file_dialog.selectedFiles()[0]
+                self.file_input.setText("Video File Path: " + str(self.selected_file))
+                self.file_input.setVisible(self.preset_button.isChecked())
+            
         self.toggle_start_button()
 
     def start_emotion_detection(self):
         if self.live_button.isChecked():
             # Live video
-            capture_video('captured_video.mp4', duration=10)
-            audio_file = "captured_video.mp4"
+            global live_video, audio_file
+            audio_file = ""
+            live_video = True
         elif self.preset_button.isChecked():
-            audio_file = self.file_input.text()  # Pre-set video file name
+            audio_file = self.selected_file
         #emotion_percentages = process_video("video_3.mp4")
         main_window=self.stack.parent()
         main_window.start_worker(audio_file)
@@ -366,10 +380,10 @@ class EmotionWorker(QThread):
     progress = pyqtSignal(int)
     image = pyqtSignal(list)
     emotion = pyqtSignal(dict)
-    audiofile =pyqtSignal(str)
+    audiofile = pyqtSignal(str)
     def __init__(self, audio_file):
         QThread.__init__(self)
-        self.audio_file =audio_file
+        self.audio_file = audio_file
     def run(self):
         deepface_result = None
         self.progress.emit(0)
@@ -413,6 +427,9 @@ class DisplayImageWidget(QWidget):
         else:
             self.frame.clear()
 
+    def clear_image(self):
+        self.frame.setPixmap(None)
+        
     def get_image(self):
         return self.image
 
@@ -440,29 +457,65 @@ class Screen2(QWidget):
         super().__init__()
         self.stack = stack
         self.screen3 = screen3
-        layout = QVBoxLayout()
+        self.layout = QVBoxLayout()
+        self.layout.setSpacing(20)
         self.label = QLabel("Emotion detection is now processing, please wait for your results!\n", self)
+        self.style_label(self.label)
+        
         self.label1 = QLabel("")
+        self.style_label(self.label1)
+        
         self.option_1_button = QPushButton("Complete Emotion Breakdown")
         self.option_1_button.clicked.connect(self.go_to_screen3_completebreakdown)
         self.option_1_button.hide()
         self.label2 = QLabel("")
+        self.style_label(self.label2)
+        
         self.option_2_button = QPushButton("Max Emotion in Video")
         self.option_2_button.clicked.connect(self.go_to_screen3_maxemotion)
         self.option_2_button.hide()
-        self.label3 = QLabel()
         
-        layout.addWidget(self.label)
-        layout.addWidget(self.label1)
-        layout.addWidget(self.option_1_button)
-        layout.addWidget(self.label2)
-        layout.addWidget(self.option_2_button)
-        layout.addWidget(self.label3)
+        self.label3 = QLabel()
+        self.style_label(self.label3)
+        
+        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.label1)
+        self.layout.addWidget(self.option_1_button)
+        self.layout.addWidget(self.label2)
+        self.layout.addWidget(self.option_2_button)
+        self.layout.addWidget(self.label3)
         
         self.video_player_widget = DisplayImageWidget()
-        layout.addWidget(self.video_player_widget)
+        self.layout.addWidget(self.video_player_widget)
         
-        self.setLayout(layout)
+        self.checkBox = QCheckBox('Text-To-Speech', self)
+        self.layout.addWidget(self.checkBox)
+        
+        self.setLayout(self.layout)
+        
+    def style_button(self, button):
+        button.setStyleSheet("""
+             QPushButton {
+                background-color: #3498DB;  /* Bright blue background */
+                color: white;                /* White text */
+                border: none;                /* No border */
+                padding: 12px 20px;          /* Larger padding for the button */
+                font-size: 18px;             /* Increase font size */
+                border-radius: 8px;          /* Rounded corners */
+                min-width: 200px;            /* Ensure the button width is enough */
+            }
+            QPushButton:hover {
+                background-color: #2980B9;   /* Darker blue on hover */
+            }
+        """)
+        
+    def style_label(self, label):
+        description_font = QFont("Arial", 18)  # Slightly smaller font for description
+        label.setFont(description_font)  # Apply the smaller font
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center align the text
+        label.setStyleSheet("color: #34495E;")  # Slightly lighter color for description
+        label.setWordWrap(True)  # Allow wrapping if necessary
+        label.setMargin(10)  # Add some margin for breathing space
 
 
     def set_emotion_data(self, emotion_data):
@@ -473,10 +526,8 @@ class Screen2(QWidget):
         self.label1.setText(f"Option 1 - use complete emotion breakdown:\n{emotion_text}")
         overall_emotion = max(emotion_data, key=emotion_data.get)
         self.label2.setText(f"Option 2 - use maximum overall emotion:\n{overall_emotion}")
+        
         print("Overall Emotion for the Video:", overall_emotion)
-
-
-
 
     def go_to_screen3_completebreakdown(self):
         # Switch to screen 3 after selecting an option
@@ -490,8 +541,10 @@ class Screen2(QWidget):
     def go_to_screen3_maxemotion(self):
         # Switch to screen 3 after selecting an option
         #pass the overall emotion to screen 3 in this case
+        global tts 
         max_emotion = max(self.emotion_data, key=self.emotion_data.get)
         self.screen3.set_emotions_forgemini(max_emotion)
+        tts = self.checkBox.isChecked()
         self.stack.setCurrentIndex(2)
 
     def restart(self):
@@ -520,20 +573,51 @@ class Screen3(QWidget):
         super().__init__()
         self.stack = stack
         layout = QVBoxLayout()
-        self.label = QLabel("Generating emotionally altered text screen. \nPlease enter sentence in input box below then press the 'generate emotionally altered announcement' button. \nYou may alter the text in the input box and re-generate the emotionally altered text")
-        #layout.addWidget(label)
+        layout.setSpacing(20)
+        self.label = QLabel("Generating emotionally altered text screen. Please enter sentence in input box below then press the 'generate emotionally altered announcement' button. You may alter the text in the input box and re-generate the emotionally altered text")
+        self.style_label(self.label)
+        
         self.labelemotionbreakdown = QLabel("")
+        self.style_label(self.labelemotionbreakdown)
+        
         self.input_box = QLineEdit()
+        self.input_box.setStyleSheet("""
+            QLineEdit {
+                padding: 10px;
+                border: 1px solid #BDC3C7;
+                border-radius: 5px;
+                background-color: #ECF0F1;
+                font-size: 16px;
+            }
+        """)
+        
         self.labellocation = QLabel("Please put your location in the box below for a more personalized statement. Leave blank for generic response without location consideration.")
         self.labellocation.setWordWrap(True)
+        self.style_label(self.labellocation)
+        
         self.input_loc_box = QLineEdit()
+        self.input_loc_box.setStyleSheet("""
+            QLineEdit {
+                padding: 10px;
+                border: 1px solid #BDC3C7;
+                border-radius: 5px;
+                background-color: #ECF0F1;
+                font-size: 16px;
+            }
+        """)
+        
         self.submit_button = QPushButton("Generate emotionally altered announcement")
+        self.style_button(self.submit_button)
+        
         self.labelgeneratedtext = QLabel("")
         self.labelgeneratedtext.setWordWrap(True)
+        self.style_label(self.labelgeneratedtext)
+        
         self.submit_button.clicked.connect(self.gemini_connection)
 
         #Restart Button
         self.restart_button = QPushButton("Restart")
+        self.style_button(self.restart_button)
         self.restart_button.clicked.connect(self.restart)
 
         layout.addWidget(self.label)
@@ -544,14 +628,39 @@ class Screen3(QWidget):
         layout.addWidget(self.input_loc_box)
         layout.addWidget(self.submit_button)
         layout.addWidget(self.restart_button)
-
         self.setLayout(layout)
+        
+    def style_button(self, button):
+        button.setStyleSheet("""
+             QPushButton {
+                background-color: #3498DB;  /* Bright blue background */
+                color: white;                /* White text */
+                border: none;                /* No border */
+                padding: 12px 20px;          /* Larger padding for the button */
+                font-size: 18px;             /* Increase font size */
+                border-radius: 8px;          /* Rounded corners */
+                min-width: 200px;            /* Ensure the button width is enough */
+            }
+            QPushButton:hover {
+                background-color: #2980B9;   /* Darker blue on hover */
+            }
+        """)
+        
+    def style_label(self, label):
+        description_font = QFont("Arial", 18)  # Slightly smaller font for description
+        label.setFont(description_font)  # Apply the smaller font
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center align the text
+        label.setStyleSheet("color: #34495E;")  # Slightly lighter color for description
+        label.setWordWrap(True)  # Allow wrapping if necessary
+        label.setMargin(10)  # Add some margin for breathing space
+        
     def set_emotions_forgemini(self, emotion_topass_togemini):
         self.emotion_forgemini = emotion_topass_togemini
         self.labelemotionbreakdown.setText = (f"Using emotion breakdown:\n{self.emotion_forgemini}")
 
     def restart(self):
-        self.stack.setCurrentIndex(0)
+        QCoreApplication.quit()
+        QProcess.startDetached(sys.executable, sys.argv)
 
 
     def gemini_connection(self):
@@ -570,7 +679,7 @@ class Screen3(QWidget):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setFixedSize(800, 800)
+        self.setFixedSize(1000, 1000)
         self.setStyleSheet('background-color:lightblue; color:black; font-weight: bold; font-size: 16px')
         self.stack = QStackedWidget()
         self.screen3 = None
@@ -579,17 +688,12 @@ class MainWindow(QWidget):
         self.screen2 = Screen2(self.stack, self.screen3)
         self.screen1 = Screen1(self.stack, self.screen2)
 
-
-
-        # self.screen1 = Screen1(self.stack)
-        # self.screen2 = Screen2(self.stack)
-        # self.screen3 = Screen3(self.stack)
-
         self.stack.addWidget(self.screen1)
         self.stack.addWidget(self.screen2)
         self.stack.addWidget(self.screen3)
 
         layout = QVBoxLayout()
+        layout.addSpacing(20)
         layout.addWidget(self.stack)
         self.setLayout(layout)
     
