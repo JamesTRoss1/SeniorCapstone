@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QHBoxLayout, QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton, QFrame
+from PyQt6.QtWidgets import QHBoxLayout, QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QStackedWidget, QLineEdit, QRadioButton, QFrame, QCheckBox
 from PyQt6.QtCore import QThread, pyqtSignal,  Qt, QUrl
 from PyQt6.QtGui import QFont, QPixmap, QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer
@@ -17,7 +17,7 @@ engine = pyttsx3.init()
 
 audio_file = "audio/video.mp4"
 frame = None 
-tts = True 
+tts = False 
 
 def detect_blur_laplacian(img, threshold=30):
     """Detects image blur using the Laplacian filter.
@@ -460,6 +460,8 @@ class Screen2(QWidget):
         layout.addWidget(self.label3)
         
         self.video_player_widget = DisplayImageWidget()
+        self.checkBox = QCheckBox('Text-To-Speech', self)
+        layout.addWidget(self.checkBox)
         layout.addWidget(self.video_player_widget)
         
         self.setLayout(layout)
@@ -490,8 +492,10 @@ class Screen2(QWidget):
     def go_to_screen3_maxemotion(self):
         # Switch to screen 3 after selecting an option
         #pass the overall emotion to screen 3 in this case
+        global tts
         max_emotion = max(self.emotion_data, key=self.emotion_data.get)
         self.screen3.set_emotions_forgemini(max_emotion)
+        tts=self.checkBox.isChecked()
         self.stack.setCurrentIndex(2)
 
     def restart(self):
