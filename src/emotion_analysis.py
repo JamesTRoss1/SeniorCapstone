@@ -21,6 +21,14 @@ live_video = False
 frame = None 
 tts = True 
 
+# Disable
+def blockPrint():
+    sys.stdout = open(os.devnull, 'w')
+
+# Restore
+def enablePrint():
+    sys.stdout = sys.__stdout__
+
 def detect_blur_laplacian(img, threshold=30):
     """Detects image blur using the Laplacian filter.
 
@@ -76,6 +84,7 @@ def emotion_faces(faces):
 
 # Function to generate content using Google Gemini
 def generate_gemini_content(sentence, emotion, location):
+    start = time.time()
     #can generate key here: https://aistudio.google.com/app/apikey
     genai.configure(api_key="AIzaSyAdwzIQZXJx48UyP10eXfUdWn2qlZSu6Os")  # Replace "YOUR_API_KEY" with your actual API key. (generated from link above)
     for m in genai.list_models():
@@ -105,11 +114,12 @@ def generate_gemini_content(sentence, emotion, location):
             "threshold": "BLOCK_NONE",
         },
     ]
-    prompt = f"Prompt: Please alter the following sentence, considering the specified crowd sentiment, aiming to evoke a more positive emotional response, and taking into account the user's location. Aim to maintain the original meaning while adjusting the tone, vocabulary, or context as needed. Parameters: Sentence: {sentence} Crowd Sentiment: {emotion} User Location: {location} Instructions: If the crowd sentiment is negative, aim to elevate the emotional tone of the response. This might involve offering hope or optimism, providing comfort or reassurance, or shifting the focus towards more positive aspects of the situation or related topics. Ensure the response is relevant to the input sentence and the overall theme or topic. Incorporate location-specific references or cultural nuances to enhance the response's relevance and impact. For example, in California, reference local landmarks, popular culture, or current events; in Georgia, highlight Southern hospitality, historical significance, or outdoor activities. Be mindful of the specific context and nuances of the situation to avoid inappropriate or insensitive responses. Consider the cultural sensitivities and preferences of the user's location. If no location is provided then give a generic response. In all cases, only provide a single response, do not give options. Add a newline character to every tenth word of your output."
+    prompt = f"Prompt: Please alter the following sentence, considering the specified crowd sentiment, aiming to evoke a more positive emotional response, and taking into account the user's location. Aim to maintain the original meaning while adjusting the tone, vocabulary, or context as needed. Parameters: Sentence: {sentence} Crowd Sentiment: {emotion} User Location: {location} Instructions: If the crowd sentiment is negative, aim to elevate the emotional tone of the response. This might involve offering hope or optimism, providing comfort or reassurance, or shifting the focus towards more positive aspects of the situation or related topics. Ensure the response is relevant to the input sentence and the overall theme or topic. Incorporate location-specific references or cultural nuances to enhance the response's relevance and impact. For example, in California, reference local landmarks, popular culture, or current events; in Georgia, highlight Southern hospitality, historical significance, or outdoor activities. Be mindful of the specific context and nuances of the situation to avoid inappropriate or insensitive responses. Consider the cultural sensitivities and preferences of the user's location. If no location is provided then give a generic response. In all cases, only provide a single response, do not give options."
     response = model.generate_content(prompt, safety_settings=safe)
-    cleaned_response = re.sub(r'[\n\\/\t]', '', str(response.text).strip())
+    cleaned_response = re.sub(r'[\n\\/\t]', ' ', str(response.text).strip())
     cleaned_response = cleaned_response.replace('/', ' ')
     print(str(cleaned_response))
+    print(str(time.time() - start))
     return cleaned_response
 
 #captures 10 second video and saves to .mp4 file - can modify this as needed
@@ -147,6 +157,7 @@ def process_video(self, video_path):
     global frame, live_video 
     
     video_capture = None 
+    start = time.time()
     
     if live_video:
         print("Using Live Video")
@@ -177,32 +188,35 @@ def process_video(self, video_path):
         
         # Capture frame every 'fps' seconds; check if frame is not blurry 
         if not detect_blur_laplacian(frame, 30):
-            frame_count += 1
-            progress_counter += 1
-            print(f"Processing frame {frame_count}")
-            self.progress.emit(int((progress_counter / max_progress) * 100))
-            
+            start_ = time.time()
             # Detect faces
             faces = detector.detect_faces(frame)
             cropped_faces = []
-            # Extract faces and append to cropped_faces list
-            for i, face in enumerate(faces):
-                x, y, w, h = face['box']
-                cropped_face = frame[y:y + h, x:x + w]
-                cropped_faces.append(cropped_face)
-                # Save detected face as JPEG file
-                emotion, _ = emotion_faces(cropped_face)
-                
+            self.progress.emit(int((progress_counter / max_progress) * 100))
+
             # Check if any faces were detected
-            if len(cropped_faces) == 0:
+            if len(faces) == 0:
                 print("No faces detected in this frame.")
                 continue  # Skip this frame if no faces are detected
+            else:
+                frame_count += 1
+                progress_counter += 1
+                print(f"Processing frame {frame_count}")
+                
+                # Extract faces and append to cropped_faces list
+                for i, face in enumerate(faces):
+                    x, y, w, h = face['box']
+                    cropped_face = frame[y:y + h, x:x + w]
+                    cropped_faces.append(cropped_face)
+                    # Save detected face as JPEG file
+                    emotion, _ = emotion_faces(cropped_face)
             
             # Output the list of cropped faces
             for i, face in enumerate(cropped_faces):
                 emotion, _ = emotion_faces(face)
                 if emotion:
                     video_emotions.append(emotion)
+            print(str(time.time() - start_))
                     
         else:
             print("Frame is blurry. Dropping frame.")
@@ -222,7 +236,7 @@ def process_video(self, video_path):
             percentage = (count / total_emotions) * 100
             emotion_percentages[emotion] = percentage
             print(f"{emotion}: {percentage:.2f}%")
-
+        print(str(time.time() - start))
         return emotion_percentages
     else:
         print("No emotions detected in the video.")
@@ -424,6 +438,7 @@ class DisplayImageWidget(QWidget):
 
             # Set the scaled image to the label
             self.frame.setPixmap(QPixmap.fromImage(scaled_image))
+            self.frame.update()
         else:
             self.frame.clear()
 
@@ -702,6 +717,8 @@ class MainWindow(QWidget):
         self.worker.emotion.connect(self.screen2.update_emotion)
         self.worker.progress.connect(self.screen2.update_progress)        
         self.worker.start()
+
+blockPrint()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
