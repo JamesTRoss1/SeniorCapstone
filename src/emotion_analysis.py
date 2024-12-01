@@ -84,43 +84,42 @@ def emotion_faces(faces):
 
 # Function to generate content using Google Gemini
 def generate_gemini_content(sentence, emotion, location):
-    start = time.time()
-    #can generate key here: https://aistudio.google.com/app/apikey
-    genai.configure(api_key="AIzaSyAdwzIQZXJx48UyP10eXfUdWn2qlZSu6Os")  # Replace "YOUR_API_KEY" with your actual API key. (generated from link above)
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            print(m.name)
-    print()
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
-    safe = [
-        {
-            "category": "HARM_CATEGORY_DANGEROUS",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_NONE",
-        },
-    ]
-    prompt = f"Prompt: Please alter the following sentence, considering the specified crowd sentiment, aiming to evoke a more positive emotional response, and taking into account the user's location. Aim to maintain the original meaning while adjusting the tone, vocabulary, or context as needed. Parameters: Sentence: {sentence} Crowd Sentiment: {emotion} User Location: {location} Instructions: If the crowd sentiment is negative, aim to elevate the emotional tone of the response. This might involve offering hope or optimism, providing comfort or reassurance, or shifting the focus towards more positive aspects of the situation or related topics. Ensure the response is relevant to the input sentence and the overall theme or topic. Incorporate location-specific references or cultural nuances to enhance the response's relevance and impact. For example, in California, reference local landmarks, popular culture, or current events; in Georgia, highlight Southern hospitality, historical significance, or outdoor activities. Be mindful of the specific context and nuances of the situation to avoid inappropriate or insensitive responses. Consider the cultural sensitivities and preferences of the user's location. If no location is provided then give a generic response. In all cases, only provide a single response, do not give options."
-    response = model.generate_content(prompt, safety_settings=safe)
-    cleaned_response = re.sub(r'[\n\\/\t]', ' ', str(response.text).strip())
-    cleaned_response = cleaned_response.replace('/', ' ')
-    print(str(cleaned_response))
-    print(str(time.time() - start))
-    return cleaned_response
+    try:
+        #can generate key here: https://aistudio.google.com/app/apikey
+        genai.configure(api_key="AIzaSyAdwzIQZXJx48UyP10eXfUdWn2qlZSu6Os")  # Replace "YOUR_API_KEY" with your actual API key. (generated from link above)
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                print(m.name)
+        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        safe = [
+            {
+                "category": "HARM_CATEGORY_DANGEROUS",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_NONE",
+            },
+        ]
+        prompt = f"Prompt: Please alter the following sentence, considering the specified crowd sentiment, aiming to evoke a more positive emotional response, and taking into account the user's location. Aim to maintain the original meaning while adjusting the tone, vocabulary, or context as needed. Parameters: Sentence: {sentence} Crowd Sentiment: {emotion} User Location: {location} Instructions: If the crowd sentiment is negative, aim to elevate the emotional tone of the response. This might involve offering hope or optimism, providing comfort or reassurance, or shifting the focus towards more positive aspects of the situation or related topics. Ensure the response is relevant to the input sentence and the overall theme or topic. Incorporate location-specific references or cultural nuances to enhance the response's relevance and impact. For example, in California, reference local landmarks, popular culture, or current events; in Georgia, highlight Southern hospitality, historical significance, or outdoor activities. Be mindful of the specific context and nuances of the situation to avoid inappropriate or insensitive responses. Consider the cultural sensitivities and preferences of the user's location. If no location is provided then give a generic response. In all cases, only provide a single response, do not give options."
+        response = model.generate_content(prompt, safety_settings=safe)
+        cleaned_response = re.sub(r'[\n\\/\t]', ' ', str(response.text).strip())
+        cleaned_response = cleaned_response.replace('/', ' ')
+        return cleaned_response
+    except Exception as e:
+        return "This is not an actual response from Gemini. Gemini Error: " + str(e)
 
 #captures 10 second video and saves to .mp4 file - can modify this as needed
 def capture_video(video_path, duration=10):
@@ -188,7 +187,6 @@ def process_video(self, video_path):
         
         # Capture frame every 'fps' seconds; check if frame is not blurry 
         if not detect_blur_laplacian(frame, 30):
-            start_ = time.time()
             # Detect faces
             faces = detector.detect_faces(frame)
             cropped_faces = []
@@ -216,7 +214,6 @@ def process_video(self, video_path):
                 emotion, _ = emotion_faces(face)
                 if emotion:
                     video_emotions.append(emotion)
-            print(str(time.time() - start_))
                     
         else:
             print("Frame is blurry. Dropping frame.")
@@ -225,8 +222,11 @@ def process_video(self, video_path):
     # Close video capture
     video_capture.release()
     cv2.destroyAllWindows()
+    
+    print("Video Emotions: " + str(video_emotions))
     # Output emotion composition for the video
     if video_emotions:
+        video_emotions = [x for x in video_emotions if x != "Unknown"]
         emotion_counts = {emotion: video_emotions.count(emotion) for emotion in set(video_emotions)}
         total_emotions = len(video_emotions)
 
@@ -236,7 +236,6 @@ def process_video(self, video_path):
             percentage = (count / total_emotions) * 100
             emotion_percentages[emotion] = percentage
             print(f"{emotion}: {percentage:.2f}%")
-        print(str(time.time() - start))
         return emotion_percentages
     else:
         print("No emotions detected in the video.")
@@ -455,12 +454,8 @@ class VideoPlayer(QWidget):
 
         self.media_player = QMediaPlayer()
         self.media_player.setSource(QUrl.fromLocalFile(file_path))
-        print(str(dir(self.media_player)))
-        print(str(self.media_player.hasVideo()))
-        print(str(self.media_player.duration()))
         
         self.video_widget = QVideoWidget()
-        print(str(dir(self.video_widget)))
         self.media_player.setVideoOutput(self.video_widget)
         
         self.media_player.play()
@@ -717,8 +712,6 @@ class MainWindow(QWidget):
         self.worker.emotion.connect(self.screen2.update_emotion)
         self.worker.progress.connect(self.screen2.update_progress)        
         self.worker.start()
-
-blockPrint()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
